@@ -15,25 +15,30 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This guide uses [maps from my GitHub page](https://github.com/brendanjodowd/maps) produced using shapefiles from [OSi](https://data-osi.opendata.arcgis.com/) and [OSNI](https://www.spatialni.gov.uk/).
+This is a guide for making interactive maps of Ireland using the leaflet package for R. I will recreate many of the effects seen in my [other guide for making static maps of Ireland](https://brendanjodowd.github.io/map_guide). 
 
-Three packages are used throughout, they are [tidyverse](https://tidyverse.tidyverse.org/), [sf](https://r-spatial.github.io/sf/) and leaflet. Tidyverse is actually a collection of packages that all work together. sf stands for simple features, it is a package for working with spatial data, and it is designed to be compatible with tidyverse. Leaflet is a package for making interactive plots.
+I'll be using [maps from my GitHub page](https://github.com/brendanjodowd/maps) produced using shapefiles from [OSi](https://data-osi.opendata.arcgis.com/) and [OSNI](https://www.spatialni.gov.uk/).
+
+Three packages are used throughout, they are [tidyverse](https://tidyverse.tidyverse.org/), [sf](https://r-spatial.github.io/sf/) and leaflet. Tidyverse is actually a collection of packages that all work together. sf stands for simple features, it is a package for working with spatial data, and it is designed to be compatible with tidyverse. [Leaflet](http://rstudio.github.io/leaflet/) is a package for making interactive plots.
+
+I will also use the package scales which has convenient functions for formatting numbers like `comma()` and `percent()`. 
 
 ```{r packages , message=FALSE, warning=FALSE}
 library(tidyverse)
 library(sf)
 library(leaflet)
+library(scales)
 ```
 
-Here I am using the map of 166 local electoral areas (LEAs) that I also use for the guide to making maps of Ireland.
+Here I am using the map of 166 local electoral areas (LEAs) that I also use for the guide to making static maps of Ireland.
 
 ```{r import_map , message=FALSE , results="hide"}
 lea_166 <- st_read("https://raw.githubusercontent.com/brendanjodowd/maps/main/lea_166.geojson")
 ```
 
-## Simple Interactive map
+## First interactive map
 
-Interactive maps can be easily created using the leaflet package. Creating an interactive map using leaflet starts with an empty `leaflet` function. Then you can add shapes using `addPolygons`. 
+Let's create the simplest map possible using leaflet. We start all interactive maps with an empty `leaflet` function. Then we can add shapes using `addPolygons`. Put `data = lea_166` in the `addPolygons` function and we're done. 
 
 We will see how many of the options for adjusting the appearance of maps with ggplot have similar counterparts in leaflet. There are two differences you should know about at the outset. The first is that with leaflet you build up the map using the pipe ` %>%` whereas with ggplot/geom_sf you add bits using plus `+`. The second difference is that ggplot accepts either the UK or US spellings of colour/color in its functions and arguments, but leaflet always uses the US version "color". 
 
@@ -42,16 +47,54 @@ leaflet() %>%
   addPolygons(data = lea_166)
 ```
 
-## Tailoring interactive maps
+## Tailoring line and fill colours
 
-Let's tailor the appearance of this map using additional arguments for `addPolygons`. We can specify the colour, line weight and opacity of lines using the arguments `color`, `weight` and `opacity`, and we can specify the fill colour and fill opacity using `fillColor` and `fillOpacity`. We can create a label based on variable that appears when we hover over a region using `label = ` followed by `~` and the variable name.
+We can tailor the appearance of this map using additional arguments for `addPolygons`. We can specify the colour, line weight and opacity of lines using the arguments `color`, `weight` and `opacity`, and we can specify the fill colour and fill opacity using `fillColor` and `fillOpacity`. 
 
-Let's use these features to create a map where LEAs in the West NUTS3 region are highlighted in green, and all other LEAs are transparent. We'll do this by creating two layers as follows, with a label for LEA name on the topmost layer.
+Let's use these features to create a map where LEAs in the West NUTS3 region are highlighted in green, and all other LEAs are transparent. We'll do this by creating the plot in two layers with two uses of the `addPolygons` function as follows, with a label for LEA name on the topmost layer.
 
 ```{r second_leaflet , message=FALSE, warning=FALSE}
+west_leas <- lea_166 %>% filter(NUTS3 == "West")
+
 leaflet() %>%  
-  addPolygons(data = lea_166 %>% filter(NUTS3 == "West"),
-              color="black", weight=1 , opacity=1, fillColor="green", fillOpacity=0.3) %>% 
-  addPolygons(data=lea_166, 
-              color="black", weight=1 , opacity=1, fillOpacity=0, label=~LEA)
+  addPolygons(data = west_leas, color="black", weight=1, opacity=1, 
+              fillColor="green", fillOpacity=0.3) %>% 
+  addPolygons(data = lea_166, color="black", weight=1, opacity=1, 
+              fillOpacity=0)
+```
+
+## Labels
+
+We can create a label based on variable that appears when we hover over a region using `label = ` followed by `~` and the variable name. Let's make a map of the LEAs and add a label which gives the LEA name using the variable `LEA`.
+
+```{r first_label , message=FALSE, warning=FALSE}
+leaflet() %>%  
+  addPolygons(data = lea_166, color="black", weight=1, opacity=1, 
+              fillOpacity=0 , label = ~LEA)
+```
+
+You can do a lot more customising with labels by formatting them using html code. This might look complicated but once you get it working you will find it easy to modify. We will use three functions to create labels as a list. The first function involved is `sprintf` which is for formatting text. The second function is `HTML`, which marks objects as html code. And the third is `lapply`, which applies a function to an object and returns a list (in this case the fuction applied is `HTML` and the object is the string created by `sprintf`. 
+
+We can use lots of html formatting options within the `sprintf` function. To begin with, we will create a label that says "Some LEA with a population", but with `<strong>` emphasis around "Some LEA" and a line break after the word "with".
+
+
+```{r first_html_label , message=FALSE, warning=FALSE}
+labels_for_map <- sprintf("<strong>Some LEA</strong><br>with a population") %>% 
+  lapply(htmltools::HTML)
+
+leaflet() %>%  
+  addPolygons(data = lea_166, color="black", weight=1, opacity=1, 
+              label = ~labels_for_map)
+```
+
+Now let's look at how to incorporate formatted variables into our labels. We use `%s` as a placeholder for string variables, and then include the string variables that will be inserted as further arguments to `sprintf`. We will include the LEA name formatted using `<strong>` and then the population which is taken from the variable `Pop2016`. Here I'm wrapping `Pop2016` in the function `comma()` because I want the population formatted with thousand separators. The `accuracy=1` piece tells R that we don't want any digits after the decimal place (`accuracy=0.1` would provide one digit after the decimal).
+
+```{r second_html_label , message=FALSE, warning=FALSE}
+labels_for_map <- sprintf("<strong>%s</strong><br>Pop: %s" , 
+                          lea_166$LEA, comma(lea_166$Pop2016 , accuracy=1)) %>% 
+  lapply(htmltools::HTML)
+
+leaflet() %>%  
+  addPolygons(data = lea_166, color="black", weight=1, opacity=1,
+              label = ~labels_for_map)
 ```
