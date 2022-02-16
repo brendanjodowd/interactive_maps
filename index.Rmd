@@ -98,3 +98,9 @@ leaflet() %>%
   addPolygons(data = lea_166, color="black", weight=1, opacity=1,
               label = ~labels_for_map)
 ```
+
+As I mentioned, `%s` is a placeholder for string variables. There is also `%d` for digits and `%f` for float variables. The population went in as a string in the above because the `comma` function returns a string.
+
+## Gradient fill colours 
+
+## Point locations 
